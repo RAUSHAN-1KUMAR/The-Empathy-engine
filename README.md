@@ -1,116 +1,167 @@
 # The Empathy Engine
 
-An emotion-aware Text-to-Speech service in Python that detects sentiment from input text and modulates synthesized voice to sound more human and expressive.
+The Empathy Engine is an emotion-aware Text-to-Speech (TTS) application built in Python.  
+It takes user text, detects sentiment, maps it to an emotion profile, and generates expressive speech by adjusting voice parameters such as rate, volume, and pitch.
 
-This implementation satisfies the challenge core requirements:
-- Accepts text input from CLI
-- Detects emotion (`positive`, `negative`, `neutral`)
-- Modulates multiple vocal parameters (`rate`, `volume`, and `pitch` via SAPI XML on Windows)
-- Uses explicit emotion-to-voice mapping logic
-- Generates a playable audio file (`.wav`)
-- Includes a browser frontend where you can type text and play generated audio
+It includes:
+- a CLI workflow for quick testing and batch-like usage
+- a Flask Web UI for interactive use
+- explicit, deterministic emotion-to-voice mapping logic
 
-## Why this design
+---
 
-- **Fast and local**: Uses `vaderSentiment` + `pyttsx3` for offline prototyping with no paid APIs.
-- **Deterministic mapping**: Each emotion maps to a baseline voice profile, then is scaled by intensity.
-- **Intensity scaling**: Stronger sentiment and punctuation (`!`, `?`) increase modulation.
-- **Windows-friendly pitch control**: Applies pitch with SAPI XML prosody in the spoken text.
+## 1) Project Overview
 
-## Project structure
+Core features:
+- Accepts text input from CLI and Web UI
+- Detects emotion category: `positive`, `negative`, `neutral`
+- Computes emotion intensity (weak -> strong)
+- Modulates voice using:
+  - speaking `rate`
+  - `volume`
+  - pitch shift (via SAPI XML prosody on Windows)
+- Exports playable `.wav` audio output
 
-- `empathy_engine.py` - main CLI app and synthesis logic
-- `web_app.py` - Flask web frontend
-- `templates/index.html` - frontend page with input + audio player
+Tech stack:
+- `vaderSentiment` for sentiment analysis
+- `pyttsx3` for local offline TTS synthesis
+- `Flask` for the browser frontend
+
+---
+
+## 2) Project Structure
+
+- `empathy_engine.py` - core analysis + synthesis logic and CLI entry point
+- `web_app.py` - Flask web server and routes
+- `templates/index.html` - UI template
+- `static/styles.css` - UI styling
 - `requirements.txt` - Python dependencies
+- `output/` - local generated audio files (CLI usage)
 
-## Setup
+---
 
-1. Create and activate a virtual environment (recommended):
+## 3) Environment Setup (Step-by-Step)
+
+### Prerequisites
+- Python 3.9+ recommended
+- Windows (best support for current pitch handling with SAPI prosody)
+
+### Step 1: Clone or open the project
+
+```powershell
+cd "path\to\raushan pr1"
+```
+
+### Step 2: Create virtual environment
 
 ```powershell
 python -m venv .venv
+```
+
+### Step 3: Activate virtual environment
+
+```powershell
 .\.venv\Scripts\activate
 ```
 
-2. Install dependencies:
+### Step 4: Install dependencies
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-## Run
+---
 
-### Interactive mode
+## 4) Run the Application
+
+### A) Run via CLI (interactive)
 
 ```powershell
 python empathy_engine.py
 ```
 
-### One-liner mode
+### B) Run via CLI (one-line)
 
 ```powershell
 python empathy_engine.py --text "This is the best news ever!" --out output/happy.wav
 ```
 
-### Optional: pick a specific installed voice
-
-```powershell
-python empathy_engine.py --text "I understand your frustration, let me help." --voice "David" --out output/support.wav
-```
-
-## Run the frontend (Web UI)
+### C) Run Web UI
 
 ```powershell
 python web_app.py
 ```
 
-Then open `http://127.0.0.1:5000` in your browser.
+Open browser:
 
-From the page you can:
-- enter any input string
-- generate emotion-aware speech
-- play the output in an embedded audio player
-- download the generated `.wav` file
+`http://127.0.0.1:5000`
 
-## Emotion to voice mapping logic
+Web UI supports:
+- text input
+- emotion-aware audio generation
+- embedded playback
+- WAV download
 
-The pipeline:
-1. Analyze sentiment with VADER.
-2. Classify emotion:
+---
+
+## 5) Design Choices and Emotion Mapping Logic
+
+This section explains the core design decisions behind the emotional voice behavior.
+
+### Why this design
+- **Local-first and simple:** Chose `vaderSentiment` + `pyttsx3` to avoid external paid APIs.
+- **Deterministic behavior:** Same input pattern leads to predictable emotion/voice settings.
+- **Explainable pipeline:** Sentiment -> emotion label -> intensity -> voice parameter scaling.
+- **Practical compatibility:** Pitch is handled through SAPI XML prosody where supported.
+
+### Emotion detection pipeline
+1. Analyze text with VADER to get `compound` sentiment score.
+2. Map sentiment score to emotion label:
    - `compound >= 0.2` -> `positive`
    - `compound <= -0.2` -> `negative`
    - otherwise -> `neutral`
-3. Compute intensity `0.1..1.0` using:
-   - absolute compound score
-   - punctuation emphasis boost from `!`/`?`
-4. Apply emotion profile + intensity scaling to voice parameters:
+3. Compute intensity (`0.1` to `1.0`) using:
+   - absolute sentiment magnitude
+   - punctuation emphasis boost (`!` and `?`)
+4. Convert label + intensity into final voice parameters.
 
-| Emotion  | Rate             | Volume           | Pitch (Hz) |
-|----------|------------------|------------------|------------|
-| Positive | Slightly faster  | Slightly louder  | Up         |
-| Negative | Slightly slower  | Slightly softer  | Down       |
-| Neutral  | Baseline         | Baseline         | Flat       |
+### Emotion -> voice parameter strategy
 
-Rate and volume are always applied. Pitch is applied through SAPI XML prosody on Windows voices.
+| Emotion | Rate | Volume | Pitch Shift |
+|---|---|---|---|
+| Positive | Slightly faster | Slightly louder | Up |
+| Negative | Slightly slower | Slightly softer | Down |
+| Neutral | Baseline | Baseline | Flat |
 
-## Example output
+Notes:
+- Rate and volume are always set.
+- Pitch shift is applied via SAPI prosody support (Windows voices).
+- Intensity scales the size of these adjustments.
 
-After running, the script prints:
-- detected emotion
-- intensity score
-- final voice parameters
-- output audio file path
+---
 
-## Notes and limitations
+## 6) Deployment (Render)
+
+Render Web Service configuration:
+
+- **Build Command**
+  ```bash
+  pip install -r requirements.txt
+  ```
+
+- **Start Command**
+  ```bash
+  gunicorn web_app:app --bind 0.0.0.0:$PORT
+  ```
+
+Current code is prepared for Render with temp output directory:
+- `web_app.py` uses `/tmp/output/web` and creates it automatically.
+
+---
+
+## 7) Limitations / Notes
 
 - Voice quality depends on installed system voices.
-- Some TTS voices may apply pitch/prosody differently.
-- For higher realism, you can swap in advanced APIs (Google Cloud TTS, ElevenLabs) while reusing the same emotion mapping logic.
-
-## Stretch-goal ideas
-
-- Add nuanced labels (`concerned`, `excited`, `inquisitive`)
-- Add FastAPI endpoint with separate API docs
-- Use SSML for richer emphasis and pause control
-- Persist logs/metrics for A/B testing voice mappings
+- Pitch/prosody behavior may vary by voice engine.
+- `pyttsx3` backend behavior can differ across environments.
+- For more realistic speech, you can later replace TTS backend while keeping the same emotion mapping pipeline.
