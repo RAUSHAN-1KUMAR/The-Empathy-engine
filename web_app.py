@@ -35,11 +35,12 @@ def index():
 
         try:
             result = synthesize(text=text, output_path=out_file)
+            generated_file = Path(result["output_file"])
             context["emotion"] = result["emotion"]
             context["intensity"] = result["intensity"]
             context["voice_params"] = result["voice_params"]
             context["audio_url"] = url_for(
-                "serve_audio", filename=out_file.name, _external=False
+                "serve_audio", filename=generated_file.name, _external=False
             )
         except Exception as exc:
             context["error"] = f"Failed to synthesize audio: {exc}"
