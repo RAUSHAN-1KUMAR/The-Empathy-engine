@@ -1,11 +1,15 @@
 import argparse
-import math
 import re
 import sys
 from pathlib import Path
 
-import pyttsx3
+from gtts import gTTS
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+try:
+    import pyttsx3
+except Exception:
+    pyttsx3 = None
 
 
 EMOTION_CONFIG = {
@@ -110,35 +114,55 @@ def synthesize(
     voice_name: str | None = None,
     debug: bool = False,
 ) -> dict:
-    engine = pyttsx3.init()
     analyzer = SentimentIntensityAnalyzer()
+    engine = None
+    tts_backend = "pyttsx3"
 
-    # Optionally choose a specific voice.
-    if voice_name:
-        matched = False
-        for voice in engine.getProperty("voices"):
-            if voice_name.lower() in voice.name.lower():
-                engine.setProperty("voice", voice.id)
-                matched = True
-                break
-        if not matched and debug:
-            print(f"[warn] Voice containing '{voice_name}' not found. Using default.")
+    if pyttsx3 is not None:
+        try:
+            engine = pyttsx3.init()
+        except Exception:
+            engine = None
 
-    base_rate = engine.getProperty("rate")
-    base_volume = engine.getProperty("volume")
+    if engine is None:
+        tts_backend = "gtts"
+        # Fallback defaults when local TTS engine is unavailable.
+        base_rate = 180
+        base_volume = 0.90
+    else:
+        # Optionally choose a specific voice.
+        if voice_name:
+            matched = False
+            for voice in engine.getProperty("voices"):
+                if voice_name.lower() in voice.name.lower():
+                    engine.setProperty("voice", voice.id)
+                    matched = True
+                    break
+            if not matched and debug:
+                print(f"[warn] Voice containing '{voice_name}' not found. Using default.")
+
+        base_rate = engine.getProperty("rate")
+        base_volume = engine.getProperty("volume")
 
     emotion, intensity, scores = detect_emotion_and_intensity(text, analyzer)
     params = build_voice_params(emotion, intensity, base_rate, base_volume)
 
-    engine.setProperty("rate", params["rate"])
-    engine.setProperty("volume", params["volume"])
-
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Use XML prosody for pitch on Windows SAPI voices.
-    speak_text = to_sapi_xml(text, params["pitch_shift_hz"])
-    engine.save_to_file(speak_text, str(output_path))
-    engine.runAndWait()
+    if tts_backend == "pyttsx3":
+        engine.setProperty("rate", params["rate"])
+        engine.setProperty("volume", params["volume"])
+
+        # Use XML prosody for pitch on Windows SAPI voices.
+        speak_text = to_sapi_xml(text, params["pitch_shift_hz"])
+        engine.save_to_file(speak_text, str(output_path))
+        engine.runAndWait()
+    else:
+        # gTTS creates MP3; switch extension if needed.
+        if output_path.suffix.lower() != ".mp3":
+            output_path = output_path.with_suffix(".mp3")
+        tts = gTTS(text=text, lang="en")
+        tts.save(str(output_path))
 
     return {
         "emotion": emotion,
@@ -146,6 +170,7 @@ def synthesize(
         "scores": scores,
         "voice_params": params,
         "output_file": str(output_path),
+        "tts_backend": tts_backend,
     }
 
 
