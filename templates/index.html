@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Empathy Engine - Web UI</title>
+    <meta name="description" content="Emotion-aware Text-to-Speech: detect sentiment and modulate voice rate, volume, and pitch." />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="container">
+      <header class="topbar fade-in">
+        <div class="brand">
+          <h1>Empathy Engine</h1>
+          <p>Emotion-aware Text‑to‑Speech that detects sentiment and modulates voice rate, volume, and pitch—fully local.</p>
+          <div class="hero-badges" aria-label="Highlights">
+            <span class="pill">Offline</span>
+            <span class="pill">Windows voices</span>
+            <span class="pill">Rate • Volume • Pitch</span>
+          </div>
+        </div>
+        <div class="pill" aria-label="App info">
+          <span aria-hidden="true">●</span>
+          <span>Local TTS • Flask UI</span>
+        </div>
+      </header>
+
+      <main role="main">
+        <section class="card fade-in" aria-label="Empathy Engine">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Generate emotion-aware speech</h2>
+              <p class="card-subtitle">
+                Input and output live in one frame &mdash; on smaller screens, <strong>scroll down</strong> to see the output section.
+              </p>
+            </div>
+            <span class="pill">Ctrl/⌘ + Enter to submit</span>
+          </div>
+
+          <div class="card-body">
+            <div class="split" aria-label="Input and output">
+              <div class="subcard" aria-label="Input panel">
+                <div class="subhead">
+                  <h3>Input</h3>
+                  <span class="pill">Text</span>
+                </div>
+                <div class="subbody">
+                  <form method="post" id="tts-form">
+                    <label for="text">Text to speak</label>
+                    <textarea
+                      id="text"
+                      name="text"
+                      placeholder="Example: I’m really excited to share this with you!"
+                    >{{ input_text }}</textarea>
+                    <div class="actions">
+                      <button class="btn" id="submit-btn" type="submit">
+                        <span id="btn-label">Generate audio</span>
+                      </button>
+                      <div class="hint"><span id="char-count">0</span> chars</div>
+                    </div>
+                  </form>
+                  <div class="hint" style="margin-top: 0.6rem; color: #facc15;">
+                    <strong>Note:</strong> on smaller screens, <strong>scroll down</strong> to see the Output panel.
+                  </div>
+                  <div class="hint" style="margin-top: 0.9rem;">
+                    <strong>How it works:</strong> sentiment → emotion → intensity → voice params → WAV.
+                  </div>
+                </div>
+              </div>
+
+              <div class="subcard" aria-label="Output panel">
+                <div class="subhead">
+                  <h3>Output</h3>
+                  <span class="pill">Result</span>
+                </div>
+                <div class="subbody">
+                  {% if error %}
+                  <div class="card callout" style="margin: 0; box-shadow: none; backdrop-filter: none;">
+                    <div class="card-header">
+                      <h3 class="card-title" style="margin: 0;">Couldn’t generate audio</h3>
+                    </div>
+                    <div class="card-body">
+                      <strong>Error:</strong> {{ error }}
+                    </div>
+                  </div>
+                  {% elif audio_url %}
+                  <div class="badge-row" aria-label="Detected attributes">
+                    <span class="badge {{ emotion }}">
+                      <span class="k">Emotion</span>
+                      <span class="v">{{ emotion }}</span>
+                    </span>
+                    <span class="badge">
+                      <span class="k">Intensity</span>
+                      <span class="v">{{ intensity }}</span>
+                    </span>
+                  </div>
+
+                  <div class="meter" aria-label="Intensity meter">
+                    <div class="meter-label">
+                      <span>Low</span>
+                      <span>High</span>
+                    </div>
+                    <div class="bar" role="img" aria-label="Intensity bar">
+                      <span id="intensity-bar"></span>
+                    </div>
+                  </div>
+
+                  <div class="audio" aria-label="Audio player and download">
+                    <audio controls src="{{ audio_url }}"></audio>
+                    <a class="download" href="{{ audio_url }}" download>Download WAV</a>
+                  </div>
+
+                  <div class="kv" aria-label="Voice parameters">
+                    <div class="pill" style="display:inline-flex;">Voice params</div>
+                    <div class="mono">
+                      rate={{ voice_params.rate }},
+                      volume={{ "%.2f"|format(voice_params.volume) }},
+                      pitch_shift={{ voice_params.pitch_shift_hz }}Hz
+                    </div>
+                  </div>
+                  {% else %}
+                  <p class="hint" style="margin: 0;">
+                    Your results will appear here. Tip: add <strong>!</strong> or <strong>?</strong> to boost intensity.
+                  </p>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="foot">
+        Panel-ready demo: fully local (no paid APIs). Audio generated as <span class="mono">.wav</span> and served by the app.
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        const ta = document.getElementById("text");
+        const count = document.getElementById("char-count");
+        const form = document.getElementById("tts-form");
+        const submitBtn = document.getElementById("submit-btn");
+        const btnLabel = document.getElementById("btn-label");
+
+        function updateCount() {
+          if (!ta || !count) return;
+          count.textContent = String((ta.value || "").length);
+        }
+
+        updateCount();
+        if (ta) ta.addEventListener("input", updateCount);
+
+        if (ta && form) {
+          ta.addEventListener("keydown", (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              form.requestSubmit();
+            }
+          });
+        }
+
+        // Loading state to look polished in demos
+        if (form) {
+          form.addEventListener("submit", () => {
+            if (submitBtn) submitBtn.disabled = true;
+            if (btnLabel) {
+              btnLabel.textContent = "Generating…";
+              const sp = document.createElement("span");
+              sp.className = "spinner";
+              sp.setAttribute("aria-hidden", "true");
+              sp.style.marginLeft = "0.6rem";
+              btnLabel.parentElement && btnLabel.parentElement.appendChild(sp);
+            }
+          });
+        }
+
+        // Best-effort intensity bar (supports numeric strings like "0.72")
+        const bar = document.getElementById("intensity-bar");
+        const rawIntensity = "{{ intensity or '' }}";
+        const n = Number(rawIntensity);
+        if (bar && Number.isFinite(n)) {
+          const clamped = Math.max(0, Math.min(1, n));
+          bar.style.width = (clamped * 100).toFixed(0) + "%";
+        } else if (bar) {
+          bar.style.width = "0%";
+        }
+      })();
+    </script>
+  </body>
+</html>
