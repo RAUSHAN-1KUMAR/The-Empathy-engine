@@ -7,7 +7,8 @@ from empathy_engine import synthesize
 
 
 app = Flask(__name__)
-GENERATED_DIR = Path("output/web")
+GENERATED_DIR = Path("/tmp/output/web")
+GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @app.route("/", methods=["GET", "POST"])
